@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>meDDI — OCR Labeling Tool</title>
+    <meta name="description" content="Prescription OCR labeling tool for VLM fine-tuning">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1 class="logo">me<span class="logo-accent">DDI</span></h1>
+                <span class="header-divider"></span>
+                <span class="header-subtitle">OCR Labeling Tool</span>
+            </div>
+            <nav id="breadcrumb" class="breadcrumb"></nav>
+        </header>
+
+        <!-- Main Content -->
+        <main id="main-content"></main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
