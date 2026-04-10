@@ -6,6 +6,49 @@
 const BACKEND_URL = 'https://fuselike-leisa-enzoutically.ngrok-free.dev';
 const API = BACKEND_URL;
 
+// ---- Auth ----
+function getToken() { return localStorage.getItem('labeling_token'); }
+function getRefresh() { return localStorage.getItem('labeling_refresh'); }
+function setTokens(token, refresh) {
+    localStorage.setItem('labeling_token', token);
+    if (refresh) localStorage.setItem('labeling_refresh', refresh);
+}
+function clearTokens() {
+    localStorage.removeItem('labeling_token');
+    localStorage.removeItem('labeling_refresh');
+}
+
+async function tryRefresh() {
+    const refresh = getRefresh();
+    if (!refresh) return false;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+            body: JSON.stringify({ refresh_token: refresh }),
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        setTokens(data.access_token, null);
+        return true;
+    } catch { return false; }
+}
+
+function logout() {
+    clearTokens();
+    document.getElementById('header-user').style.display = 'none';
+    renderLogin();
+}
+
+function updateHeaderUser(user) {
+    const el = document.getElementById('header-user');
+    if (!el) return;
+    el.style.display = 'flex';
+    if (user) {
+        document.getElementById('header-user-name').textContent = user.full_name || user.email || '';
+    }
+}
+
 // Helper: build full image URL from API-returned path
 function imgUrl(path) {
     if (!path) return '';
@@ -18,9 +61,13 @@ function imgUrl(path) {
 async function loadImage(imgElement, path) {
     if (!path) return;
     const url = imgUrl(path) + `?t=${Date.now()}`;
+    const token = getToken();
     try {
         const res = await fetch(url, {
-            headers: { 'ngrok-skip-browser-warning': 'true' }
+            headers: {
+                'ngrok-skip-browser-warning': 'true',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            }
         });
         if (!res.ok) throw new Error(`${res.status}`);
         const blob = await res.blob();
@@ -48,12 +95,79 @@ let currentData = null;
 let imageIds = []; // ordered list of IDs for prev/next navigation
 let isZoomed = false;
 
+// ---- Login ----
+async function renderLogin() {
+    currentView = 'login';
+    document.getElementById('breadcrumb').innerHTML = '';
+    document.getElementById('header-user').style.display = 'none';
+    const main = document.getElementById('main-content');
+    main.innerHTML = `
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-header">
+                    <span class="logo">me<span class="logo-accent">DDI</span></span>
+                    <p class="login-subtitle">OCR Labeling Tool — Sign In</p>
+                </div>
+                <form id="loginForm" onsubmit="doLogin(event)">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="loginEmail" required autocomplete="email" placeholder="you@example.com">
+                    </div>
+                    <div class="form-group" style="margin-top:0.8rem">
+                        <label>Password</label>
+                        <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••">
+                    </div>
+                    <div id="loginError" class="login-error" style="display:none"></div>
+                    <button type="submit" class="btn btn-primary login-btn" id="loginBtn">Sign In</button>
+                </form>
+            </div>
+        </div>
+    `;
+    setTimeout(() => document.getElementById('loginEmail')?.focus(), 50);
+}
+
+async function doLogin(e) {
+    e.preventDefault();
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    const errEl = document.getElementById('loginError');
+    const btn = document.getElementById('loginBtn');
+
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    errEl.style.display = 'none';
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+            body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Login failed');
+        setTokens(data.token, data.refresh_token);
+        updateHeaderUser(data.user);
+        navigate('#/');
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+    }
+}
+
 // ---- Router ----
 function navigate(hash) {
     window.location.hash = hash;
 }
 
 function handleRoute() {
+    if (!getToken()) {
+        renderLogin();
+        return;
+    }
+    updateHeaderUser(null);
+
     const hash = window.location.hash || '#/';
     const parts = hash.replace('#/', '').split('/');
 
@@ -77,16 +191,24 @@ window.addEventListener('hashchange', handleRoute);
 window.addEventListener('load', handleRoute);
 
 // ---- API helpers ----
-async function api(path, options = {}) {
+async function api(path, options = {}, _retry = false) {
     const url = `${API}/labeling${path}`;
+    const token = getToken();
     const res = await fetch(url, {
         headers: {
             'Content-Type': 'application/json',
             'ngrok-skip-browser-warning': 'true',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
             ...options.headers,
         },
         ...options,
     });
+    if (res.status === 401 && !_retry) {
+        const refreshed = await tryRefresh();
+        if (refreshed) return api(path, options, true);
+        logout();
+        throw new Error('Session expired. Please log in again.');
+    }
     if (!res.ok) {
         const err = await res.text();
         throw new Error(`API error ${res.status}: ${err}`);
