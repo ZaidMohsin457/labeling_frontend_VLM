@@ -2,6 +2,37 @@
    meDDI OCR Labeling Tool — App Logic
    ============================================================ */
 
+// --- Client-Side UX Restrictions ---
+// 1. Prevent right-click/context menu everywhere
+document.addEventListener('contextmenu', event => event.preventDefault());
+
+// 2. Prevent native image dragging (prevents drag-to-desktop)
+document.addEventListener('dragstart', event => {
+    if (event.target.tagName === 'IMG') {
+        event.preventDefault();
+    }
+});
+
+// 3. Prevent DevTools & Source shortcuts
+document.addEventListener('keydown', event => {
+    // F12
+    if (event.key === 'F12' || event.keyCode === 123) {
+        event.preventDefault();
+    }
+    // Ctrl+Shift+I / J / C (Inspectors & Console)
+    if (event.ctrlKey && event.shiftKey && (event.key === 'I' || event.key === 'i' || event.keyCode === 73 || event.key === 'J' || event.key === 'j' || event.keyCode === 74 || event.key === 'C' || event.key === 'c' || event.keyCode === 67)) {
+        event.preventDefault();
+    }
+    // Ctrl+U (View Source)
+    if (event.ctrlKey && (event.key === 'U' || event.key === 'u' || event.keyCode === 85)) {
+        event.preventDefault();
+    }
+    // Ctrl+S (Save Page)
+    if (event.ctrlKey && (event.key === 'S' || event.key === 's' || event.keyCode === 83)) {
+        event.preventDefault();
+    }
+});
+
 // ⚠️ SET YOUR BACKEND URL HERE (no trailing slash)
 const BACKEND_URL = 'https://api.meddiai.com';
 const API = BACKEND_URL;
@@ -56,11 +87,12 @@ function imgUrl(path) {
     return `${BACKEND_URL}${path.startsWith('/') ? '' : '/'}${path}`;
 }
 
-// Helper: load image via fetch with ngrok header, then set as blob URL
-// This bypasses ngrok's HTML interstitial for <img> tags
 async function loadImage(imgElement, path) {
     if (!path) return;
-    const url = imgUrl(path) + `?t=${Date.now()}`;
+    let url = imgUrl(path);
+    if (!url.includes('amazonaws.com')) {
+        url += (url.includes('?') ? '&' : '?') + `t=${Date.now()}`;
+    }
     const token = getToken();
     try {
         const headers = { 'ngrok-skip-browser-warning': 'true' };
