@@ -3,7 +3,7 @@
    ============================================================ */
 
 // ⚠️ SET YOUR BACKEND URL HERE (no trailing slash)
-const BACKEND_URL = 'https://fuselike-leisa-enzoutically.ngrok-free.dev';
+const BACKEND_URL = 'https://api.meddiai.com';
 const API = BACKEND_URL;
 
 // ---- Auth ----
@@ -63,12 +63,11 @@ async function loadImage(imgElement, path) {
     const url = imgUrl(path) + `?t=${Date.now()}`;
     const token = getToken();
     try {
-        const res = await fetch(url, {
-            headers: {
-                'ngrok-skip-browser-warning': 'true',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-            }
-        });
+        const headers = { 'ngrok-skip-browser-warning': 'true' };
+        if (token && !url.includes('amazonaws.com')) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        const res = await fetch(url, { headers });
         if (!res.ok) throw new Error(`${res.status}`);
         const blob = await res.blob();
         imgElement.src = URL.createObjectURL(blob);
@@ -395,7 +394,7 @@ async function renderEditor() {
         // Use corrected data if available, else fall back to OCR data
         const formData = d.corrected_data || d.ocr_data;
         const meds = formData.medicines_parsed || [];
-        
+
         // Initialize boxes from server data (contains p.label_coordinates or original bboxes)
         const bboxes = d.ocr_data.bboxes || {};
         currentBoxesData = JSON.parse(JSON.stringify(bboxes)); // deep copy
@@ -588,10 +587,10 @@ function removeMedicine(index) {
 }
 
 // Function to automatically sync edited structured fields into the Patient Details raw string
-window.syncPatientField = function(newVal, labelStr) {
+window.syncPatientField = function (newVal, labelStr) {
     const rawInput = document.getElementById('f_patient_details');
     if (!rawInput || !rawInput.value) return;
-    
+
     // Look for e.g. "Patient Name : whatever," or "Age : whatever,"
     const regex = new RegExp(`(${labelStr}\\s*:\\s*)([^,]*)`, 'i');
     if (regex.test(rawInput.value)) {
@@ -695,7 +694,7 @@ let isDragPanning = false;
 function toggleZoom(e) {
     const container = document.getElementById('imageContainer');
     if (!container) return;
-    
+
     // Set smooth scrolling for the transition
     container.style.scrollBehavior = 'smooth';
 
@@ -706,11 +705,11 @@ function toggleZoom(e) {
     }
 
     const img = document.getElementById('editorImage');
-    
+
     // Calculate click position ratio before zoom
     let xRatio = 0.5;
     let yRatio = 0.5;
-    
+
     if (e && e.target === img && !isZoomed) {
         const rect = img.getBoundingClientRect();
         xRatio = (e.clientX - rect.left) / rect.width;
@@ -728,7 +727,7 @@ function toggleZoom(e) {
             container.scrollLeft = (newRect.width * xRatio) - (container.clientWidth / 2);
             container.scrollTop = (newRect.height * yRatio) - (container.clientHeight / 2);
             drawBBoxes(); // Recalculate bbox overlay for new zoom state
-            
+
             // Turn off smooth scrolling after the transition to allow instant drag-panning
             setTimeout(() => { container.style.scrollBehavior = 'auto'; }, 600);
         }, 30);
@@ -746,7 +745,7 @@ let startX, startY, scrollLeft, scrollTop, isDown = false;
 document.addEventListener('mousedown', (e) => {
     const container = document.getElementById('imageContainer');
     if (!container || !isZoomed || !container.contains(e.target)) return;
-    
+
     // Ignore if starting drag on a bbox
     if (e.target.classList.contains('bbox-rect') || e.target.classList.contains('bbox-handle')) return;
 
@@ -768,11 +767,11 @@ document.addEventListener('mousemove', (e) => {
     const y = e.pageY - container.offsetTop;
     const walkX = (x - startX);
     const walkY = (y - startY);
-    
+
     if (Math.abs(walkX) > 5 || Math.abs(walkY) > 5) {
-        isDragPanning = true; 
+        isDragPanning = true;
     }
-    
+
     container.scrollLeft = scrollLeft - walkX;
     container.scrollTop = scrollTop - walkY;
 });
@@ -783,7 +782,7 @@ let cropper = null;
 
 async function redoOCR() {
     if (!confirm("Are you sure you want to redo OCR? This will overwrite your current corrections.")) return;
-    
+
     document.getElementById('main-content').innerHTML = '<div class="loading"><div class="spinner"></div>Rerunning OCR...</div>';
     try {
         await api(`/images/${currentImageId}/redo_ocr`, { method: 'POST' });
@@ -799,18 +798,18 @@ function startCrop() {
     const img = document.getElementById('editorImage');
     const container = document.getElementById('imageContainer');
     if (!img || !container) return;
-    
+
     if (isZoomed) toggleZoom(); // unzoom first
-    
+
     document.getElementById('imageActionsNormal').style.display = 'none';
     document.getElementById('imageActionsCrop').style.display = 'flex';
     document.getElementById('bboxOverlay').style.display = 'none'; // hide bboxes
     container.classList.add('cropping-active');
-    
+
     // Auto-init Cropper.js
     cropper = new Cropper(img, {
         viewMode: 1,
-        dragMode: 'none', 
+        dragMode: 'none',
         autoCropArea: 0.9,
         responsive: true,
         restore: false,
@@ -828,7 +827,7 @@ function startCrop() {
 
 function rotateImage(deg) {
     if (cropper) cropper.rotate(deg);
-}    
+}
 function cancelCrop() {
     if (cropper) {
         cropper.destroy();
@@ -836,7 +835,7 @@ function cancelCrop() {
     }
     const container = document.getElementById('imageContainer');
     if (container) container.classList.remove('cropping-active');
-    
+
     document.getElementById('imageActionsCrop').style.display = 'none';
     document.getElementById('imageActionsNormal').style.display = 'flex';
     document.getElementById('bboxOverlay').style.display = 'block';
@@ -844,14 +843,14 @@ function cancelCrop() {
 
 async function applyCrop() {
     if (!cropper) return;
-    
+
     // Get cropped canvas
     const canvas = cropper.getCroppedCanvas();
     if (!canvas) return;
-    
+
     // Convert to base64 jpeg
     const base64Image = canvas.toDataURL('image/jpeg', 0.85);
-    
+
     document.getElementById('imageActionsCrop').innerHTML = '<span>Saving...</span>';
     try {
         await api(`/images/${currentImageId}/replace`, {
@@ -859,13 +858,13 @@ async function applyCrop() {
             body: JSON.stringify({ image_base64: base64Image })
         });
         showToast('Image cropped and saved', 'success');
-        
+
         const container = document.getElementById('imageContainer');
         if (container) container.classList.remove('cropping-active');
     } catch (e) {
         showToast('Crop save failed: ' + e.message, 'error');
     }
-    
+
     cancelCrop();
     // Fully re-render to ensure bboxes and image are in sync with the server
     renderEditor();
@@ -894,13 +893,13 @@ function drawBBoxes() {
         const wrapperH = wrapper.clientHeight;
         const imgNatW = img.naturalWidth || 1;
         const imgNatH = img.naturalHeight || 1;
-        
+
         const scale = Math.min(wrapperW / imgNatW, wrapperH / imgNatH);
         const renderedW = imgNatW * scale;
         const renderedH = imgNatH * scale;
         const offsetX = (wrapperW - renderedW) / 2;
         const offsetY = (wrapperH - renderedH) / 2;
-        
+
         overlay.style.left = offsetX + 'px';
         overlay.style.top = offsetY + 'px';
         overlay.style.width = renderedW + 'px';
@@ -908,36 +907,36 @@ function drawBBoxes() {
     }
 
     overlay.innerHTML = '';
-    
+
     for (const [label, coords] of Object.entries(currentBoxesData)) {
         if (!coords || coords.length !== 4) continue;
-        
+
         const [x1, y1, x2, y2] = coords; // 0-1000 scale
-        
+
         const box = document.createElement('div');
         box.className = 'bbox-rect';
         box.dataset.label = label;
-        
+
         // Convert to % for responsive absolute positioning within overlay
         box.style.left = (x1 / 1000 * 100) + '%';
         box.style.top = (y1 / 1000 * 100) + '%';
         box.style.width = ((x2 - x1) / 1000 * 100) + '%';
         box.style.height = ((y2 - y1) / 1000 * 100) + '%';
-        
+
         const labelEl = document.createElement('div');
         labelEl.className = 'bbox-label';
         labelEl.textContent = label;
         box.appendChild(labelEl);
-        
+
         // Add resize handles (bottom-right)
         const handle = document.createElement('div');
         handle.className = 'bbox-handle';
-        
+
         // Add simple dragging functionality
         box.onmousedown = (e) => startDragBBox(e, box, label);
         // Prevent zoom when clicking the box itself
         box.onclick = (e) => e.stopPropagation();
-        
+
         box.appendChild(handle);
         overlay.appendChild(box);
     }
@@ -945,29 +944,29 @@ function drawBBoxes() {
 
 function startDragBBox(e, boxEl, label) {
     e.stopPropagation(); // prevent pan logic
-    
+
     const isResize = e.target.classList.contains('bbox-handle');
     const startMouseX = e.clientX;
     const startMouseY = e.clientY;
-    
+
     const overlay = document.getElementById('bboxOverlay');
     const rect = overlay.getBoundingClientRect();
-    
+
     const coords = currentBoxesData[label];
     const startX1 = coords[0];
     const startY1 = coords[1];
     const startX2 = coords[2];
     const startY2 = coords[3];
-    
+
     function onMove(ev) {
         ev.stopPropagation();
         const dx = ev.clientX - startMouseX;
         const dy = ev.clientY - startMouseY;
-        
+
         // Convert screen delta to 0-1000 scale delta
         const dScaleX = (dx / rect.width) * 1000;
         const dScaleY = (dy / rect.height) * 1000;
-        
+
         if (isResize) {
             coords[2] = Math.min(1000, startX2 + dScaleX);
             coords[3] = Math.min(1000, startY2 + dScaleY);
@@ -979,14 +978,14 @@ function startDragBBox(e, boxEl, label) {
             coords[2] = startX2 + shiftX;
             coords[3] = startY2 + shiftY;
         }
-        
+
         // Apply inline
         boxEl.style.left = (coords[0] / 1000 * 100) + '%';
         boxEl.style.top = (coords[1] / 1000 * 100) + '%';
         boxEl.style.width = ((coords[2] - coords[0]) / 1000 * 100) + '%';
         boxEl.style.height = ((coords[3] - coords[1]) / 1000 * 100) + '%';
     }
-    
+
     function onUp(ev) {
         ev.stopPropagation();
         document.removeEventListener('mousemove', onMove);
@@ -994,7 +993,7 @@ function startDragBBox(e, boxEl, label) {
         // Ensure ints
         currentBoxesData[label] = coords.map(c => Math.round(c));
     }
-    
+
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
 }
