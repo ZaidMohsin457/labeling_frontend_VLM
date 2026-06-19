@@ -34,7 +34,7 @@ document.addEventListener('keydown', event => {
 });
 
 // ⚠️ SET YOUR BACKEND URL HERE (no trailing slash)
-const BACKEND_URL = 'https://api.meddiai.com';
+const BACKEND_URL = 'http://18.118.49.12:8080';
 const API = BACKEND_URL;
 
 // ---- Auth ----
